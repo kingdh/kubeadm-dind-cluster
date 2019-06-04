@@ -16,7 +16,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 set -o errtrace
-set -v
+
 set -x
 
 if [ $(uname) = Darwin ]; then
@@ -804,7 +804,7 @@ function dind::ensure-downloaded-kubectl {
   local path="${KUBECTL_DIR}/${link_target}"
   if [[ ! -f "${path}" ]]; then
     mkdir -p "${KUBECTL_DIR}"
-    curl -sSLo "${path}" "${kubectl_url}"
+    curl -sSL -x socks5h://localhost:7080 "${kubectl_url}" -o "${path}"
     echo "${kubectl_sha1}  ${path}" | sha1sum -c
     chmod +x "${path}"
   fi
@@ -1328,6 +1328,63 @@ EOF
   if [[ ${BUILD_KUBEADM} || ${BUILD_HYPERKUBE} ]]; then
     docker exec "$master_name" mount --make-shared /k8s
   fi
+
+  ### for debug ###
+  docker cp ./wrapkubeadm ${container_id}:/usr/local/bin/wrapkubeadm
+  set +e
+  read -r -d '' DOCKER_WRAP_SCRIPT<<'eof'
+    #!/bin/bash
+
+	set -x
+
+	mirror="gcr.azk8s.cn"
+	namespace="google_containers"
+	prefix="gcr.io"
+	specialPrefix="k8s.gcr.io"
+
+	function run_sys_docker {
+		orig_docker "$@"
+	#    echo "docker $@"
+	}
+	docker_cmd=${1:-}
+
+	case ${docker_cmd} in
+		pull)
+			image=${2}
+			newImage=${newImage:-}
+			echo ${image}
+			IFS="/" read -ra imageArray <<< "${image}"
+			if [[ ${imageArray[0]} == ${prefix} || ${imageArray[0]} == ${specialPrefix} ]]; then
+				if [[ ${#imageArray[@]} == 2 ]]; then
+	#                seq = (mirror, namespace, imageArray[1])
+					newImage=${mirror}"/"${namespace}"/"${imageArray[1]};
+				else
+	#                seq = (mirror, imageArray[1], imageArray[2])
+					newImage=${mirror}"/"${imageArray[1]}"/"${imageArray[2]}
+				fi;
+				run_sys_docker ${docker_cmd} ${newImage}
+				tag_cmd=${tag_cmd:-tag}
+				run_sys_docker ${tag_cmd} ${newImage} ${image}
+				rmi_cmd=${rmi_cmd:-rmi}
+				run_sys_docker ${rmi_cmd} ${newImage}
+			else
+				run_sys_docker "$@";
+			fi
+			exit 0
+			;;
+		*)
+			run_sys_docker "$@"
+			;;
+	esac
+eof
+
+  echo ${DOCKER_WRAP_SCRIPT}
+
+  docker exec  ${container_id} /bin/bash -c "echo '${DOCKER_WRAP_SCRIPT}' > /usr/local/bin/docker"
+  docker exec --privileged ${container_id} chmod +x /usr/local/bin/docker
+  docker exec --privileged ${container_id} mv /usr/bin/docker /usr/bin/orig_docker
+  docker exec --privileged -it ${container_id} /bin/bash
+
   dind::kubeadm "${container_id}" init "${init_args[@]}" --ignore-preflight-errors=all "$@"
   kubeadm_join_flags="$(docker exec "${container_id}" kubeadm token create --print-join-command | sed 's/^kubeadm join //')"
   dind::configure-kubectl
@@ -2317,6 +2374,8 @@ COMMAND="${1:-}"
 
 case ${COMMAND} in
   up)
+    #my change: skip pull dind image
+    DIND_SKIP_PULL=y
     if [[ ! ( ${DIND_IMAGE} =~ local ) && ! ${DIND_SKIP_PULL:-} ]]; then
       dind::step "Making sure DIND image is up to date"
       docker pull "${DIND_IMAGE}" >&2
