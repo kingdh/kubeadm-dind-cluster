@@ -511,6 +511,7 @@ NUM_NODES=${NUM_NODES:-2}
 EXTRA_PORTS="${EXTRA_PORTS:-}"
 KUBECTL_DIR="${KUBECTL_DIR:-${HOME}/.kubeadm-dind-cluster}"
 DASHBOARD_URL="${DASHBOARD_URL:-https://rawgit.com/kubernetes/dashboard/bfab10151f012d1acc5dfb1979f3172e2400aa3c/src/deploy/kubernetes-dashboard.yaml}"
+MYDASHBOARD="${MYDASHBOARD:-./dashboard.yaml}"
 SKIP_SNAPSHOT="${SKIP_SNAPSHOT:-}"
 E2E_REPORT_DIR="${E2E_REPORT_DIR:-}"
 DIND_NO_PARALLEL_E2E="${DIND_NO_PARALLEL_E2E:-}"
@@ -1164,7 +1165,7 @@ function dind::ensure-dashboard-clusterrolebinding {
 
 function dind::deploy-dashboard {
   dind::step "Deploying k8s dashboard"
-  dind::retry "${kubectl}" --context "$(dind::context-name)" apply -f "${DASHBOARD_URL}"
+  dind::retry "${kubectl}" --context "$(dind::context-name)" apply -f "${MYDASHBOARD}"
   # https://kubernetes-io-vnext-staging.netlify.com/docs/admin/authorization/rbac/#service-account-permissions
   # Thanks @liggitt for the hint
   dind::retry dind::ensure-dashboard-clusterrolebinding
@@ -1222,6 +1223,62 @@ function dind::check-dns-service-type {
     echo >&2 "WARNING: for 1.13+, only coredns can be used as the DNS service"
     DNS_SERVICE="coredns"
   fi
+}
+
+function dind::replace_docker {
+  set +e
+  read -r -d '' DOCKER_WRAP_SCRIPT<<'eof'
+    #!/bin/bash
+
+	set -x
+
+	mirror="gcr.azk8s.cn"
+	namespace="google_containers"
+	prefix="gcr.io"
+	specialPrefix="k8s.gcr.io"
+
+	function run_sys_docker {
+		orig_docker "$@"
+	#    echo "docker $@"
+	}
+	docker_cmd=${1:-}
+
+	case ${docker_cmd} in
+		pull)
+			image=${2}
+			newImage=${newImage:-}
+			echo ${image}
+			IFS="/" read -ra imageArray <<< "${image}"
+			if [[ ${imageArray[0]} == ${prefix} || ${imageArray[0]} == ${specialPrefix} ]]; then
+				if [[ ${#imageArray[@]} == 2 ]]; then
+	#                seq = (mirror, namespace, imageArray[1])
+					newImage=${mirror}"/"${namespace}"/"${imageArray[1]};
+				else
+	#                seq = (mirror, imageArray[1], imageArray[2])
+					newImage=${mirror}"/"${imageArray[1]}"/"${imageArray[2]}
+				fi;
+				run_sys_docker ${docker_cmd} ${newImage}
+				tag_cmd=${tag_cmd:-tag}
+				run_sys_docker ${tag_cmd} ${newImage} ${image}
+				rmi_cmd=${rmi_cmd:-rmi}
+				run_sys_docker ${rmi_cmd} ${newImage}
+			else
+				run_sys_docker "$@";
+			fi
+			exit 0
+			;;
+		*)
+			run_sys_docker "$@"
+			;;
+	esac
+eof
+
+#  echo ${DOCKER_WRAP_SCRIPT}
+  local container_id="$1"
+  docker exec  ${container_id} /bin/bash -c "echo '${DOCKER_WRAP_SCRIPT}' > /usr/local/bin/docker"
+  docker exec --privileged ${container_id} chmod +x /usr/local/bin/docker
+  docker exec --privileged ${container_id} mv /usr/bin/docker /usr/bin/orig_docker
+  set -e
 }
 
 function dind::init {
@@ -1331,59 +1388,8 @@ EOF
 
   ### for debug ###
   docker cp ./wrapkubeadm ${container_id}:/usr/local/bin/wrapkubeadm
-  set +e
-  read -r -d '' DOCKER_WRAP_SCRIPT<<'eof'
-    #!/bin/bash
-
-	set -x
-
-	mirror="gcr.azk8s.cn"
-	namespace="google_containers"
-	prefix="gcr.io"
-	specialPrefix="k8s.gcr.io"
-
-	function run_sys_docker {
-		orig_docker "$@"
-	#    echo "docker $@"
-	}
-	docker_cmd=${1:-}
-
-	case ${docker_cmd} in
-		pull)
-			image=${2}
-			newImage=${newImage:-}
-			echo ${image}
-			IFS="/" read -ra imageArray <<< "${image}"
-			if [[ ${imageArray[0]} == ${prefix} || ${imageArray[0]} == ${specialPrefix} ]]; then
-				if [[ ${#imageArray[@]} == 2 ]]; then
-	#                seq = (mirror, namespace, imageArray[1])
-					newImage=${mirror}"/"${namespace}"/"${imageArray[1]};
-				else
-	#                seq = (mirror, imageArray[1], imageArray[2])
-					newImage=${mirror}"/"${imageArray[1]}"/"${imageArray[2]}
-				fi;
-				run_sys_docker ${docker_cmd} ${newImage}
-				tag_cmd=${tag_cmd:-tag}
-				run_sys_docker ${tag_cmd} ${newImage} ${image}
-				rmi_cmd=${rmi_cmd:-rmi}
-				run_sys_docker ${rmi_cmd} ${newImage}
-			else
-				run_sys_docker "$@";
-			fi
-			exit 0
-			;;
-		*)
-			run_sys_docker "$@"
-			;;
-	esac
-eof
-
-  echo ${DOCKER_WRAP_SCRIPT}
-
-  docker exec  ${container_id} /bin/bash -c "echo '${DOCKER_WRAP_SCRIPT}' > /usr/local/bin/docker"
-  docker exec --privileged ${container_id} chmod +x /usr/local/bin/docker
-  docker exec --privileged ${container_id} mv /usr/bin/docker /usr/bin/orig_docker
-  docker exec --privileged -it ${container_id} /bin/bash
+  dind::replace_docker "${container_id}"
+#  docker exec --privileged -it ${container_id} /bin/bash
 
   dind::kubeadm "${container_id}" init "${init_args[@]}" --ignore-preflight-errors=all "$@"
   kubeadm_join_flags="$(docker exec "${container_id}" kubeadm token create --print-join-command | sed 's/^kubeadm join //')"
@@ -1847,6 +1853,7 @@ function dind::up {
       exit 1
     else
       node_containers+=(${container_id})
+      dind::create-node-container "${container_id}"
       dind::step "Node container started:" ${n}
     fi
   done
