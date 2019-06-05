@@ -1853,7 +1853,7 @@ function dind::up {
       exit 1
     else
       node_containers+=(${container_id})
-      dind::create-node-container "${container_id}"
+      dind::replace_docker "${container_id}"
       dind::step "Node container started:" ${n}
     fi
   done
