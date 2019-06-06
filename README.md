@@ -28,7 +28,7 @@ kube-scheduler-kube-master              1/1     Running   1          49m   10.19
 kubernetes-dashboard-58cb847d78-tml8c   1/1     Running   0          11m   10.244.3.2   kube-node-2   <none>           <none>
 ```
 注：dind::ensure-downloaded-kubectl函数需要下载kubectl到本地，这里直接使用了代理。因为是在物理机上，
-可以比较容易的提前下载好，然后修改该函数是之跳过去即可。
+可以比较容易的提前下载好，然后修改该函数使之跳过去即可。
 
 
 # 原README
