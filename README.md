@@ -1,5 +1,5 @@
 # kubeadm-dind-cluster [![CircleCI](https://circleci.com/gh/kubernetes-sigs/kubeadm-dind-cluster/tree/master.svg?style=svg)](https://circleci.com/gh/kubernetes-sigs/kubeadm-dind-cluster/tree/master) [![Travis CI](https://travis-ci.org/kubernetes-sigs/kubeadm-dind-cluster.svg?branch=master)](https://travis-ci.org/kubernetes-sigs/kubeadm-dind-cluster)
-##主要修改说明
+## 主要修改说明
 加了一些代码，以便能够在国内运行。增加和修改的文件主要有：
 1. 在dind-cluster-v1.14.sh - 利用下面的dockerwrapper和wrapkueadm实现无障碍拉取相关镜像。
 2. dashboard.yaml - 避免从rawgit上下载dashboard的yaml文件
@@ -11,7 +11,7 @@ shell脚本来实现。
 部署服务，如果相关node上没有镜像，kubelet会去pull，而且使用的是rpc，这样在国内会失败。但kubeadm会
 调用docker来拉镜像，这样就可以把利用上面的dockerwrapper实现访问镜像了。
 
-##运行
+## 运行
 ```shell
 $./dind-cluster-v1.14.sh up 2>&1 | tee a.out
 ...
