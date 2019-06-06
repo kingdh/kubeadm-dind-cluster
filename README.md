@@ -1,4 +1,37 @@
 # kubeadm-dind-cluster [![CircleCI](https://circleci.com/gh/kubernetes-sigs/kubeadm-dind-cluster/tree/master.svg?style=svg)](https://circleci.com/gh/kubernetes-sigs/kubeadm-dind-cluster/tree/master) [![Travis CI](https://travis-ci.org/kubernetes-sigs/kubeadm-dind-cluster.svg?branch=master)](https://travis-ci.org/kubernetes-sigs/kubeadm-dind-cluster)
+##主要修改说明
+加了一些代码，以便能够在国内运行。增加和修改的文件主要有：
+1. 在dind-cluster-v1.14.sh - 利用下面的dockerwrapper和wrapkueadm实现无障碍拉取相关镜像。
+2. dashboard.yaml - 避免从rawgit上下载dashboard的yaml文件
+3. dockerwrapper.sh - 将docker访问gcr.io/k8s.gcr.io的镜像转换成访问azure的相应镜像。此处参考了
+https://github.com/silenceshell/docker-wrapper.git 在dind中无法使用python，因此写了一个
+shell脚本来实现。
+4. 修改了dind镜像中的wrapkubeadm，以便在三个node（一个master，两个work node）中提前下载好相关
+的镜像。否则dind会使用kubectl来部署相关服务，如kube-proxy，而kubectl会调用kubelet在目标node上
+部署服务，如果相关node上没有镜像，kubelet会去pull，而且使用的是rpc，这样在国内会失败。但kubeadm会
+调用docker来拉镜像，这样就可以把利用上面的dockerwrapper实现访问镜像了。
+
+##运行
+```shell
+$./dind-cluster-v1.14.sh up 2>&1 | tee a.out
+...
+$ kubectl get pods -n kube-system -o wide
+NAME                                    READY   STATUS    RESTARTS   AGE   IP           NODE          NOMINATED NODE   READINESS GATES
+coredns-fb8b8dccf-d4zvg                 1/1     Running   0          11m   10.244.1.4   kube-master   <none>           <none>
+etcd-kube-master                        1/1     Running   1          50m   10.192.0.2   kube-master   <none>           <none>
+kube-apiserver-kube-master              1/1     Running   1          50m   10.192.0.2   kube-master   <none>           <none>
+kube-controller-manager-kube-master     1/1     Running   1          10m   10.192.0.2   kube-master   <none>           <none>
+kube-proxy-66rzp                        1/1     Running   1          12m   10.192.0.3   kube-node-1   <none>           <none>
+kube-proxy-hflpr                        1/1     Running   1          12m   10.192.0.4   kube-node-2   <none>           <none>
+kube-proxy-q6mnt                        1/1     Running   1          12m   10.192.0.2   kube-master   <none>           <none>
+kube-scheduler-kube-master              1/1     Running   1          49m   10.192.0.2   kube-master   <none>           <none>
+kubernetes-dashboard-58cb847d78-tml8c   1/1     Running   0          11m   10.244.3.2   kube-node-2   <none>           <none>
+```
+注：dind::ensure-downloaded-kubectl函数需要下载kubectl到本地，这里直接使用了代理。因为是在物理机上，
+可以比较容易的提前下载好，然后修改该函数是之跳过去即可。
+
+
+#原README
 A Kubernetes multi-node cluster for developer _of_ Kubernetes and
 projects that extend Kubernetes. Based on kubeadm and DIND (Docker in
 Docker).
