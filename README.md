@@ -12,6 +12,8 @@ shell脚本来实现。
 调用docker来拉镜像，这样就可以把利用上面的dockerwrapper实现访问镜像了。
 
 ## 运行
+默认需要在项目根目录下运行，因为dind-cluster-v1.14.sh需要从根目录（即当前目录）读取dockerwrapper.sh和
+wrapkubeadm。如果要在别的目录读取，需要对这段逻辑进行修改，比如直接写到shell脚本中。
 ```shell
 $./dind-cluster-v1.14.sh up 2>&1 | tee a.out
 ...
