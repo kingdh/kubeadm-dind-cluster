@@ -4,7 +4,7 @@
 1. 在dind-cluster-v1.14.sh - 利用下面的dockerwrapper和wrapkueadm实现无障碍拉取相关镜像。
 2. dashboard.yaml - 避免从rawgit上下载dashboard的yaml文件
 3. dockerwrapper.sh - 将docker访问gcr.io/k8s.gcr.io的镜像转换成访问azure的相应镜像。此处参考了
-https://github.com/silenceshell/docker-wrapper.git。 因为在dind中无法使用python，因此写了一个
+https://github.com/silenceshell/docker-wrapper.git 。 因为在dind中无法使用python，因此写了一个
 shell脚本来实现。
 4. 修改了dind镜像中的wrapkubeadm，以便在三个node（一个master，两个work node）中提前下载好相关
 的镜像。否则dind会使用kubectl来部署相关服务，如kube-proxy，而kubectl会调用kubelet在目标node上
