@@ -1165,7 +1165,7 @@ function dind::ensure-dashboard-clusterrolebinding {
 
 function dind::deploy-dashboard {
   dind::step "Deploying k8s dashboard"
-  dind::retry "${kubectl}" --context "$(dind::context-name)" apply -f "${MYDASHBOARD}"
+  dind::retry "${kubectl}" --v=8 --context "$(dind::context-name)" apply -f "${MYDASHBOARD}"
   # https://kubernetes-io-vnext-staging.netlify.com/docs/admin/authorization/rbac/#service-account-permissions
   # Thanks @liggitt for the hint
   dind::retry dind::ensure-dashboard-clusterrolebinding
@@ -1281,6 +1281,15 @@ eof
   set -e
 }
 
+function dind::fix-node {
+  local container_id=${1}
+  docker cp ./wrapkubeadm ${container_id}:/usr/local/bin/wrapkubeadm
+  dind::replace_docker "${container_id}"
+  docker exec --privileged ${container_id} swapoff -a
+#  docker exec --privileged -it ${container_id} /bin/bash
+  dind::kubeadm "${container_id}" with_init pullImage
+}
+
 function dind::init {
   local -a opts
   dind::set-master-opts
@@ -1385,14 +1394,8 @@ EOF
   if [[ ${BUILD_KUBEADM} || ${BUILD_HYPERKUBE} ]]; then
     docker exec "$master_name" mount --make-shared /k8s
   fi
-
-  ### for debug ###
-  docker cp ./wrapkubeadm ${container_id}:/usr/local/bin/wrapkubeadm
-  dind::replace_docker "${container_id}"
-  docker exec --privileged ${container_id} swapoff -a
-#  docker exec --privileged -it ${container_id} /bin/bash
-  # pull images first at master node ###
-  dind::kubeadm "${container_id}" pullImage
+  # fix master node
+  dind::fix-node ${container_id}
 
   dind::kubeadm "${container_id}" init "${init_args[@]}" --ignore-preflight-errors=all "$@"
   kubeadm_join_flags="$(docker exec "${container_id}" kubeadm token create --print-join-command | sed 's/^kubeadm join //')"
@@ -1856,7 +1859,7 @@ function dind::up {
       exit 1
     else
       node_containers+=(${container_id})
-      dind::replace_docker "${container_id}"
+      dind::fix-node ${container_id}
       dind::step "Node container started:" ${n}
     fi
   done
@@ -1942,8 +1945,6 @@ function dind::up {
   echo "Management CIDR(s): ${mgmt_net_cidrs[@]}"
   echo "Service CIDR/mode: ${SERVICE_CIDR}/${SERVICE_NET_MODE}"
   echo "Pod CIDR(s): ${pod_net_cidrs[@]}"
-  # debug only, in node 1
-  docker exec -it ${node_containers[0]} /bin/bash
 }
 
 function dind::fix-mounts {
