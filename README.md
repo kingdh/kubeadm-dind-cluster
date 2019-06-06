@@ -9,7 +9,7 @@ shell脚本来实现。
 4. 修改了dind镜像中的wrapkubeadm，以便在三个node（一个master，两个work node）中提前下载好相关
 的镜像。否则dind会使用kubectl来部署相关服务，如kube-proxy，而kubectl会调用kubelet在目标node上
 部署服务，如果相关node上没有镜像，kubelet会去pull，而且使用的是rpc，这样在国内会失败。但kubeadm会
-调用docker来拉镜像，这样就可以把利用上面的dockerwrapper实现访问镜像了。
+调用docker来拉镜像，这样就可以利用上面的dockerwrapper实现访问镜像了。
 
 ## 运行
 默认需要在项目根目录下运行，因为dind-cluster-v1.14.sh需要从根目录（即当前目录）读取dockerwrapper.sh和
