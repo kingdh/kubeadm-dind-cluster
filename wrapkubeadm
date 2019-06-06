@@ -319,6 +319,12 @@ function dind::do-kubeadm {
 
 if [[ ${1:-} = ensure-binaries ]]; then
   dind::ensure-binaries-and-hypokube
+elif [[ ${1:-} = pullImage ]]; then
+  rm -f /etc/machine-id
+  systemd-machine-id-setup
+  dind::prepare-for-kubeadm
+
+  dind::retry dind::do-kubeadm config images pull
 else
   # Weave depends on /etc/machine-id being unique
   rm -f /etc/machine-id

@@ -1389,7 +1389,10 @@ EOF
   ### for debug ###
   docker cp ./wrapkubeadm ${container_id}:/usr/local/bin/wrapkubeadm
   dind::replace_docker "${container_id}"
+  docker exec --privileged ${container_id} swapoff -a
 #  docker exec --privileged -it ${container_id} /bin/bash
+  # pull images first at master node ###
+  dind::kubeadm "${container_id}" pullImage
 
   dind::kubeadm "${container_id}" init "${init_args[@]}" --ignore-preflight-errors=all "$@"
   kubeadm_join_flags="$(docker exec "${container_id}" kubeadm token create --print-join-command | sed 's/^kubeadm join //')"
@@ -1939,6 +1942,8 @@ function dind::up {
   echo "Management CIDR(s): ${mgmt_net_cidrs[@]}"
   echo "Service CIDR/mode: ${SERVICE_CIDR}/${SERVICE_NET_MODE}"
   echo "Pod CIDR(s): ${pod_net_cidrs[@]}"
+  # debug only, in node 1
+  docker exec -it ${node_containers[0]} /bin/bash
 }
 
 function dind::fix-mounts {
