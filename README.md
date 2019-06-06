@@ -31,7 +31,7 @@ kubernetes-dashboard-58cb847d78-tml8c   1/1     Running   0          11m   10.24
 可以比较容易的提前下载好，然后修改该函数是之跳过去即可。
 
 
-#原README
+# 原README
 A Kubernetes multi-node cluster for developer _of_ Kubernetes and
 projects that extend Kubernetes. Based on kubeadm and DIND (Docker in
 Docker).
