@@ -6,6 +6,8 @@ mirror="gcr.azk8s.cn"
 namespace="google_containers"
 prefix="gcr.io"
 specialPrefix="k8s.gcr.io"
+quayPrefix="quay.io"
+quayMirror="quay.azk8s.cn"
 
 function run_sys_docker {
     orig_docker "$@"
@@ -31,6 +33,13 @@ case ${docker_cmd} in
             fi;
             run_sys_docker ${docker_cmd} ${newImage}
             tag_cmd=${tag_cmd:-tag}
+            run_sys_docker ${tag_cmd} ${newImage} ${image}
+            rmi_cmd=${rmi_cmd:-rmi}
+            run_sys_docker ${rmi_cmd} ${newImage}
+        elif [[ ${imageArray[0]} == ${quayPrefix} ]]; then
+        	newImage=${quayMirror}"/"${imageArray[*]:1}
+        	run_sys_docker ${docker_cmd} ${newImage}
+        	tag_cmd=${tag_cmd:-tag}
             run_sys_docker ${tag_cmd} ${newImage} ${image}
             rmi_cmd=${rmi_cmd:-rmi}
             run_sys_docker ${rmi_cmd} ${newImage}
